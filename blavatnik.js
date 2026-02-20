@@ -128,13 +128,13 @@ async function parseMenuImage(imageBuffer, apiKey) {
             type: "text",
             text: `Extract the weekly lunch menu from this image. Return ONLY valid JSON with no markdown or code fences:
 {
-  "Monday": ["first item — ~Xkcal", "second item — ~Xkcal", "third item — ~Xkcal"],
+  "Monday": ["first item", "second item", "third item"],
   "Tuesday": [...],
   "Wednesday": [...],
   "Thursday": [...],
   "Friday": [...]
 }
-Preserve the exact order items appear in the image. Include calorie counts if shown.`,
+Preserve the exact order items appear in the image. Do not include calorie counts.`,
           },
         ],
       },
@@ -169,9 +169,23 @@ function saveMenu(menuData) {
 /**
  * Format a day's ordered item array as a numbered list.
  */
+function stripCalories(text) {
+  return text
+    .replace(/\s*[—–-]\s*~?\d+\s*kcal/gi, "")
+    .replace(/\s*\(?\s*~?\d+\s*kcal\s*\)?/gi, "")
+    .trim();
+}
+
 function formatDayMenu(dayMenu) {
   if (!Array.isArray(dayMenu)) return [];
-  return dayMenu.map((item, i) => `${i + 1}. ${item}`);
+  return dayMenu.map((item, i) => {
+    let cleaned = stripCalories(item);
+    // Second item is the vegetarian option
+    if (i === 1 && !cleaned.includes("(VE)")) {
+      cleaned += " (VE)";
+    }
+    return `${i + 1}. ${cleaned}`;
+  });
 }
 
 /**

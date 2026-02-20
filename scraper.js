@@ -16,6 +16,13 @@ const DAY_PREFIX_RE = new RegExp(
   `^(${DAYS.join("|")})\\s*[–—-]\\s*`,
 );
 
+function stripCalories(text) {
+  return text
+    .replace(/\s*[—–-]\s*~?\d+\s*kcal/gi, "")
+    .replace(/\s*\(?\s*~?\d+\s*kcal\s*\)?/gi, "")
+    .trim();
+}
+
 // --- Menu sources ---
 // Each has a fetch function that returns an array of formatted lines.
 // To add Schwarzman, Blavatnik, etc., just add a new entry here.
@@ -134,10 +141,10 @@ function parseExeterSection($, sectionName, today) {
 
         if (dayMatch) {
           if (dayMatch[1] === today) {
-            lines.push(`• ${liText.replace(DAY_PREFIX_RE, "")}`);
+            lines.push(`• ${stripCalories(liText.replace(DAY_PREFIX_RE, ""))}`);
           }
         } else {
-          lines.push(`• ${liText}`);
+          lines.push(`• ${stripCalories(liText)}`);
         }
       });
     }
