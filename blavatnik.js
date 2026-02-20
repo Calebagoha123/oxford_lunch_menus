@@ -79,7 +79,7 @@ async function checkForNewMenu() {
         console.log(`Blavatnik: trying attachment "${attachment.filename}" (${Math.round(attachment.size / 1024)}KB)...`);
         menuData = await parseMenuImage(attachment.content, apiKey);
         const hasItems = menuData && WEEKDAYS.some(
-          (day) => menuData[day] && (menuData[day].meat || menuData[day].veg || menuData[day].side),
+          (day) => Array.isArray(menuData[day]) && menuData[day].length > 0,
         );
         if (hasItems) break;
         menuData = null;
@@ -128,13 +128,13 @@ async function parseMenuImage(imageBuffer, apiKey) {
             type: "text",
             text: `Extract the weekly lunch menu from this image. Return ONLY valid JSON with no markdown or code fences:
 {
-  "Monday": {"meat": "meat or fish option — ~Xkcal", "veg": "vegetarian or vegan option — ~Xkcal", "side": "soup or side — ~Xkcal"},
-  "Tuesday": {"meat": "...", "veg": "...", "side": "..."},
-  "Wednesday": {"meat": "...", "veg": "...", "side": "..."},
-  "Thursday": {"meat": "...", "veg": "...", "side": "..."},
-  "Friday": {"meat": "...", "veg": "...", "side": "..."}
+  "Monday": ["first item — ~Xkcal", "second item — ~Xkcal", "third item — ~Xkcal"],
+  "Tuesday": [...],
+  "Wednesday": [...],
+  "Thursday": [...],
+  "Friday": [...]
 }
-Use empty string "" for any category not present. Include calorie counts if shown.`,
+Preserve the exact order items appear in the image. Include calorie counts if shown.`,
           },
         ],
       },
@@ -167,15 +167,11 @@ function saveMenu(menuData) {
 }
 
 /**
- * Format a day's {main, veg, side} object as a numbered list.
+ * Format a day's ordered item array as a numbered list.
  */
 function formatDayMenu(dayMenu) {
-  if (!dayMenu) return [];
-  const lines = [];
-  if (dayMenu.meat) lines.push(`1. ${dayMenu.meat}`);
-  if (dayMenu.veg)  lines.push(`2. ${dayMenu.veg}`);
-  if (dayMenu.side) lines.push(`3. ${dayMenu.side}`);
-  return lines;
+  if (!Array.isArray(dayMenu)) return [];
+  return dayMenu.map((item, i) => `${i + 1}. ${item}`);
 }
 
 /**
@@ -212,8 +208,8 @@ async function fetchBlavatnik(today) {
     // Today not in menu — find the next available weekday
     const todayIdx = WEEKDAYS.indexOf(today);
     const fallbackDay =
-      WEEKDAYS.find((day, i) => i > todayIdx && cached.menu[day] && (cached.menu[day].meat || cached.menu[day].veg)) ||
-      WEEKDAYS.find((day) => cached.menu[day] && (cached.menu[day].meat || cached.menu[day].veg));
+      WEEKDAYS.find((day, i) => i > todayIdx && Array.isArray(cached.menu[day]) && cached.menu[day].length > 0) ||
+      WEEKDAYS.find((day) => Array.isArray(cached.menu[day]) && cached.menu[day].length > 0);
 
     if (!fallbackDay) return [];
     return [`_Next available: ${fallbackDay}_`, ...formatDayMenu(cached.menu[fallbackDay])];

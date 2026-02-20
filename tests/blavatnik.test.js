@@ -13,11 +13,11 @@ const MENU_PATH = path.join(__dirname, "../data/blavatnik-menu.json");
 const { getWeekMonday } = require("../blavatnik");
 
 const SAMPLE_MENU = {
-  Monday:    { meat: "Grilled Chicken — ~380kcal", veg: "Tomato Soup — ~120kcal", side: "Side Salad — ~80kcal" },
-  Tuesday:   { meat: "Lentil Dhal — ~310kcal",    veg: "Caesar Salad — ~290kcal", side: "Garlic Bread — ~150kcal" },
-  Wednesday: { meat: "Pasta Arrabiata — ~420kcal", veg: "Veggie Stew — ~300kcal", side: "Bread Roll — ~120kcal" },
-  Thursday:  { meat: "Fish Pie — ~450kcal",        veg: "Mushroom Risotto — ~400kcal", side: "Coleslaw — ~90kcal" },
-  Friday:    { meat: "Veggie Burrito — ~390kcal",  veg: "Falafel Wrap — ~350kcal", side: "Corn Chips — ~200kcal" },
+  Monday:    ["Grilled Chicken — ~380kcal", "Tomato Soup — ~120kcal", "Side Salad — ~80kcal"],
+  Tuesday:   ["Lentil Dhal — ~310kcal", "Caesar Salad — ~290kcal", "Garlic Bread — ~150kcal"],
+  Wednesday: ["Pasta Arrabiata — ~420kcal", "Veggie Stew — ~300kcal", "Bread Roll — ~120kcal"],
+  Thursday:  ["Fish Pie — ~450kcal", "Mushroom Risotto — ~400kcal", "Coleslaw — ~90kcal"],
+  Friday:    ["Veggie Burrito — ~390kcal", "Falafel Wrap — ~350kcal", "Corn Chips — ~200kcal"],
 };
 
 function freshCache() {
@@ -57,7 +57,7 @@ describe("fetchBlavatnik", () => {
   test("falls back to next available day with a label when today has no menu", async () => {
     const cacheWithGap = JSON.stringify({
       weekCommencing: getWeekMonday().toISOString(),
-      menu: { Monday: { meat: "", veg: "", side: "" }, Tuesday: { meat: "Lentil Dhal", veg: "", side: "" } },
+      menu: { Monday: [], Tuesday: ["Lentil Dhal"] },
     });
     existsSpy.mockReturnValue(true);
     readSpy.mockReturnValue(cacheWithGap);
@@ -67,7 +67,7 @@ describe("fetchBlavatnik", () => {
     expect(items[1]).toBe("1. Lentil Dhal");
   });
 
-  test("numbers items as 1. main 2. veg 3. side", async () => {
+  test("numbers items in order 1, 2, 3", async () => {
     existsSpy.mockReturnValue(true);
     readSpy.mockReturnValue(freshCache());
 
@@ -80,7 +80,7 @@ describe("fetchBlavatnik", () => {
   test("returns empty array when all days in cache are empty", async () => {
     const emptyCache = JSON.stringify({
       weekCommencing: getWeekMonday().toISOString(),
-      menu: { Monday: { meat: "", veg: "", side: "" }, Tuesday: { meat: "", veg: "", side: "" } },
+      menu: { Monday: [], Tuesday: [] },
     });
     existsSpy.mockReturnValue(true);
     readSpy.mockReturnValue(emptyCache);
