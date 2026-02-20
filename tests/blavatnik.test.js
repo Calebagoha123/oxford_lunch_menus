@@ -48,9 +48,9 @@ describe("fetchBlavatnik", () => {
 
     const items = await fetchBlavatnik("Monday");
     expect(items).toEqual([
-      "1. Grilled Chicken — ~380kcal",
-      "2. Tomato Soup — ~120kcal",
-      "3. Side Salad — ~80kcal",
+      "1. Grilled Chicken",
+      "2. Tomato Soup (VE)",
+      "3. Side Salad",
     ]);
   });
 
