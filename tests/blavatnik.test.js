@@ -49,7 +49,7 @@ describe("fetchBlavatnik", () => {
     const items = await fetchBlavatnik("Monday");
     expect(items).toEqual([
       "1. Grilled Chicken",
-      "2. Tomato Soup (VE)",
+      "2. Tomato Soup (V)",
       "3. Side Salad",
     ]);
   });

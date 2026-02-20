@@ -181,8 +181,8 @@ function formatDayMenu(dayMenu) {
   return dayMenu.map((item, i) => {
     let cleaned = stripCalories(item);
     // Second item is the vegetarian option
-    if (i === 1 && !cleaned.includes("(VE)")) {
-      cleaned += " (VE)";
+    if (i === 1 && !cleaned.includes("(V)")) {
+      cleaned += " (V)";
     }
     return `${i + 1}. ${cleaned}`;
   });
