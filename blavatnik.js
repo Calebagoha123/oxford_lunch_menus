@@ -36,12 +36,9 @@ async function checkForNewMenu() {
     const lock = await client.getMailboxLock("INBOX");
 
     try {
-      // Search for emails from the Blavatnik mailing list (most recent first)
+      // Search for Blavatnik menu emails by subject (sender may vary)
       const messages = await client.search(
-        {
-          from: "blavatnik",
-          subject: "menu",
-        },
+        { subject: "Weekly Menu Update" },
         { uid: true },
       );
 
@@ -55,22 +52,33 @@ async function checkForNewMenu() {
       const raw = await client.download(uid, undefined, { uid: true });
 
       const parsed = await simpleParser(raw.content);
-      const pngAttachment = parsed.attachments.find(
-        (a) =>
-          a.contentType === "image/png" || a.contentType === "image/jpeg",
+      const imageAttachments = parsed.attachments.filter(
+        (a) => a.contentType === "image/png" || a.contentType === "image/jpeg",
       );
 
-      if (!pngAttachment) {
+      if (!imageAttachments.length) {
         console.log("Blavatnik: no PNG/JPEG attachment found in latest email.");
         return;
       }
 
-      console.log("Blavatnik: found menu image, sending to Claude Vision...");
-      const menuData = await parseMenuImage(pngAttachment.content, apiKey);
+      // Try each image until one yields actual menu data
+      let menuData = null;
+      for (const attachment of imageAttachments) {
+        console.log(`Blavatnik: trying attachment "${attachment.filename}" (${Math.round(attachment.size / 1024)}KB)...`);
+        menuData = await parseMenuImage(attachment.content, apiKey);
+        const DAYS_CHECK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+        const hasItems = menuData && DAYS_CHECK.some(
+          (day) => Array.isArray(menuData[day]) && menuData[day].length > 0,
+        );
+        if (hasItems) break;
+        menuData = null;
+      }
 
       if (menuData) {
         saveMenu(menuData);
         console.log("Blavatnik: menu saved successfully.");
+      } else {
+        console.log("Blavatnik: no menu data found in any attachment.");
       }
     } finally {
       lock.release();
@@ -180,8 +188,22 @@ async function fetchBlavatnik(today) {
   try {
     const cached = JSON.parse(fs.readFileSync(MENU_PATH, "utf-8"));
     const items = cached.menu[today];
-    if (!items || !items.length) return [];
-    return items.map((item) => `• ${item}`);
+    if (items && items.length) {
+      return items.map((item) => `• ${item}`);
+    }
+
+    // Today not in menu — find the next available weekday
+    const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    const todayIdx = WEEKDAYS.indexOf(today);
+    const fallbackDay = WEEKDAYS.find(
+      (day, i) => i > todayIdx && cached.menu[day] && cached.menu[day].length,
+    ) || WEEKDAYS.find(
+      (day) => cached.menu[day] && cached.menu[day].length,
+    );
+
+    if (!fallbackDay) return [];
+    const fallbackItems = cached.menu[fallbackDay];
+    return [`_Next available: ${fallbackDay}_`, ...fallbackItems.map((item) => `• ${item}`)];
   } catch {
     return [];
   }

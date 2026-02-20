@@ -33,7 +33,7 @@ const MENU_SOURCES = [
   // },
   {
     name: "Blavatnik Café",
-    info: "🕐 TBC · 💷 TBC",
+    info: "🕐 12:00–13:30 · 💷 £5.50",
     fetch: fetchBlavatnik,
   },
 ];
