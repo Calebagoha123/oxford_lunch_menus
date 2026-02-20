@@ -5,7 +5,19 @@ const fs = require("fs");
 const path = require("path");
 
 const MENU_PATH = path.join(__dirname, "data", "blavatnik-menu.json");
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
+/**
+ * Returns the Monday of the current week (at midnight UTC).
+ */
+function getWeekMonday(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 /**
  * Connect to Gmail via IMAP, find the latest Blavatnik menu email,
@@ -66,9 +78,8 @@ async function checkForNewMenu() {
       for (const attachment of imageAttachments) {
         console.log(`Blavatnik: trying attachment "${attachment.filename}" (${Math.round(attachment.size / 1024)}KB)...`);
         menuData = await parseMenuImage(attachment.content, apiKey);
-        const DAYS_CHECK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-        const hasItems = menuData && DAYS_CHECK.some(
-          (day) => Array.isArray(menuData[day]) && menuData[day].length > 0,
+        const hasItems = menuData && WEEKDAYS.some(
+          (day) => menuData[day] && (menuData[day].meat || menuData[day].veg || menuData[day].side),
         );
         if (hasItems) break;
         menuData = null;
@@ -97,7 +108,6 @@ async function parseMenuImage(imageBuffer, apiKey) {
   const anthropic = new Anthropic({ apiKey });
 
   const base64Image = imageBuffer.toString("base64");
-  const mediaType = "image/png";
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-5-20250929",
@@ -110,21 +120,21 @@ async function parseMenuImage(imageBuffer, apiKey) {
             type: "image",
             source: {
               type: "base64",
-              media_type: mediaType,
+              media_type: "image/png",
               data: base64Image,
             },
           },
           {
             type: "text",
-            text: `Extract the daily lunch menu from this image. Return ONLY valid JSON with no markdown formatting, no code fences, just the raw JSON object:
+            text: `Extract the weekly lunch menu from this image. Return ONLY valid JSON with no markdown or code fences:
 {
-  "Monday": ["Item description — ~Xkcal", ...],
-  "Tuesday": [...],
-  "Wednesday": [...],
-  "Thursday": [...],
-  "Friday": [...]
+  "Monday": {"meat": "meat or fish option — ~Xkcal", "veg": "vegetarian or vegan option — ~Xkcal", "side": "soup or side — ~Xkcal"},
+  "Tuesday": {"meat": "...", "veg": "...", "side": "..."},
+  "Wednesday": {"meat": "...", "veg": "...", "side": "..."},
+  "Thursday": {"meat": "...", "veg": "...", "side": "..."},
+  "Friday": {"meat": "...", "veg": "...", "side": "..."}
 }
-Include all items for each day exactly as shown in the image. If calorie counts are shown, include them.`,
+Use empty string "" for any category not present. Include calorie counts if shown.`,
           },
         ],
       },
@@ -135,7 +145,6 @@ Include all items for each day exactly as shown in the image. If calorie counts 
   try {
     return JSON.parse(text);
   } catch {
-    // Try to extract JSON from the response if it has extra text
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
       return JSON.parse(match[0]);
@@ -146,11 +155,11 @@ Include all items for each day exactly as shown in the image. If calorie counts 
 }
 
 /**
- * Save parsed menu data to disk with a timestamp.
+ * Save parsed menu data to disk, tagged with the Monday of the current week.
  */
 function saveMenu(menuData) {
   const payload = {
-    weekOf: new Date().toISOString(),
+    weekCommencing: getWeekMonday().toISOString(),
     menu: menuData,
   };
   fs.mkdirSync(path.dirname(MENU_PATH), { recursive: true });
@@ -158,19 +167,31 @@ function saveMenu(menuData) {
 }
 
 /**
+ * Format a day's {main, veg, side} object as a numbered list.
+ */
+function formatDayMenu(dayMenu) {
+  if (!dayMenu) return [];
+  const lines = [];
+  if (dayMenu.meat) lines.push(`1. ${dayMenu.meat}`);
+  if (dayMenu.veg)  lines.push(`2. ${dayMenu.veg}`);
+  if (dayMenu.side) lines.push(`3. ${dayMenu.side}`);
+  return lines;
+}
+
+/**
  * Read cached menu and return today's items.
- * If no cache or stale (>7 days), refresh from email first.
+ * Refreshes only when the cached week differs from the current week.
  */
 async function fetchBlavatnik(today) {
-  // Check if we need to refresh
   let needsRefresh = true;
   if (fs.existsSync(MENU_PATH)) {
     try {
       const cached = JSON.parse(fs.readFileSync(MENU_PATH, "utf-8"));
-      const age = Date.now() - new Date(cached.weekOf).getTime();
-      if (age < MAX_AGE_MS) {
-        needsRefresh = false;
-      }
+      const cachedMonday = cached.weekCommencing
+        ? new Date(cached.weekCommencing).toDateString()
+        : null;
+      const currentMonday = getWeekMonday().toDateString();
+      if (cachedMonday === currentMonday) needsRefresh = false;
     } catch {
       // Corrupted file, will refresh
     }
@@ -180,33 +201,25 @@ async function fetchBlavatnik(today) {
     await checkForNewMenu();
   }
 
-  // Read (possibly refreshed) cache
-  if (!fs.existsSync(MENU_PATH)) {
-    return [];
-  }
+  if (!fs.existsSync(MENU_PATH)) return [];
 
   try {
     const cached = JSON.parse(fs.readFileSync(MENU_PATH, "utf-8"));
-    const items = cached.menu[today];
-    if (items && items.length) {
-      return items.map((item) => `• ${item}`);
-    }
+    const dayMenu = cached.menu[today];
+    const lines = formatDayMenu(dayMenu);
+    if (lines.length) return lines;
 
     // Today not in menu — find the next available weekday
-    const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
     const todayIdx = WEEKDAYS.indexOf(today);
-    const fallbackDay = WEEKDAYS.find(
-      (day, i) => i > todayIdx && cached.menu[day] && cached.menu[day].length,
-    ) || WEEKDAYS.find(
-      (day) => cached.menu[day] && cached.menu[day].length,
-    );
+    const fallbackDay =
+      WEEKDAYS.find((day, i) => i > todayIdx && cached.menu[day] && (cached.menu[day].meat || cached.menu[day].veg)) ||
+      WEEKDAYS.find((day) => cached.menu[day] && (cached.menu[day].meat || cached.menu[day].veg));
 
     if (!fallbackDay) return [];
-    const fallbackItems = cached.menu[fallbackDay];
-    return [`_Next available: ${fallbackDay}_`, ...fallbackItems.map((item) => `• ${item}`)];
+    return [`_Next available: ${fallbackDay}_`, ...formatDayMenu(cached.menu[fallbackDay])];
   } catch {
     return [];
   }
 }
 
-module.exports = { fetchBlavatnik, checkForNewMenu };
+module.exports = { fetchBlavatnik, checkForNewMenu, getWeekMonday };
