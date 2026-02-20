@@ -13,8 +13,8 @@ const MENU_PATH = path.join(__dirname, "../data/blavatnik-menu.json");
 const { getWeekMonday } = require("../blavatnik");
 
 const SAMPLE_MENU = {
-  Monday:    ["Grilled Chicken — ~380kcal", "Tomato Soup — ~120kcal", "Side Salad — ~80kcal"],
-  Tuesday:   ["Lentil Dhal — ~310kcal", "Caesar Salad — ~290kcal", "Garlic Bread — ~150kcal"],
+  Monday:    ["Grilled Chicken — ~1,380kcal", "Tomato Soup — ~120kcal", "Side Salad — ~80kcal"],
+  Tuesday:   ["Lentil Dhal — ~310kcal", "Caesar Salad — ~290kcal", "Garlic Bread — ~1,150kcal"],
   Wednesday: ["Pasta Arrabiata — ~420kcal", "Veggie Stew — ~300kcal", "Bread Roll — ~120kcal"],
   Thursday:  ["Fish Pie — ~450kcal", "Mushroom Risotto — ~400kcal", "Coleslaw — ~90kcal"],
   Friday:    ["Veggie Burrito — ~390kcal", "Falafel Wrap — ~350kcal", "Corn Chips — ~200kcal"],

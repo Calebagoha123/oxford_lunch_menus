@@ -171,8 +171,8 @@ function saveMenu(menuData) {
  */
 function stripCalories(text) {
   return text
-    .replace(/\s*[—–-]\s*~?\d+\s*kcal/gi, "")
-    .replace(/\s*\(?\s*~?\d+\s*kcal\s*\)?/gi, "")
+    .replace(/\s*[—–-]\s*~?\d[\d,]*\s*kcal/gi, "")
+    .replace(/\s*\(?\s*~?\d[\d,]*\s*kcal\s*\)?/gi, "")
     .trim();
 }
 
