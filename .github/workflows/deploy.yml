@@ -13,5 +13,5 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/deploy_key.pem
           chmod 400 /tmp/deploy_key.pem
           ssh -i /tmp/deploy_key.pem -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} \
-            "cd ~/oxford_lunch_menus && git pull origin main && npm install --production && pm2 restart all --update-env"
+            "cd ~/oxford_lunch_menus && git pull origin main && npm install && npm test && npm prune --production && pm2 restart all --update-env"
           rm /tmp/deploy_key.pem
