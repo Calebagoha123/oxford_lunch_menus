@@ -154,4 +154,4 @@ function parseExeterSection($, sectionName, today) {
 // --- Blavatnik (stub) ---
 // async function fetchBlavatnik(today) { ... }
 
-module.exports = { getTodaysMenu };
+module.exports = { getTodaysMenu, fetchCohenQuad, parseExeterSection };
