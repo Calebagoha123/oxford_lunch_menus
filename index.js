@@ -6,6 +6,7 @@ const { execSync } = require("child_process");
 const path = require("path");
 const cron = require("node-cron");
 const { getTodaysMenu } = require("./scraper");
+const { checkForNewMenu } = require("./blavatnik");
 
 const GROUP_NAME = process.env.GROUP_NAME;
 if (!GROUP_NAME) {
@@ -97,6 +98,13 @@ function startCronJob() {
  */
 async function sendMenuToGroup() {
   try {
+    // Refresh Blavatnik menu from email before sending (no-op if cache is fresh)
+    try {
+      await checkForNewMenu();
+    } catch (err) {
+      console.error("Error refreshing Blavatnik menu:", err.message);
+    }
+
     const chats = await client.getChats();
     const group = chats.find(
       (c) => c.isGroup && c.name === GROUP_NAME,

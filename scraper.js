@@ -1,5 +1,6 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
+const { fetchBlavatnik } = require("./blavatnik");
 
 const DAYS = [
   "Sunday",
@@ -30,11 +31,11 @@ const MENU_SOURCES = [
   //   info: "🕐 XX:XX–XX:XX · 💷 £X.XX",
   //   fetch: fetchSchwarzman,
   // },
-  // {
-  //   name: "Blavatnik School of Government",
-  //   info: "🕐 XX:XX–XX:XX · 💷 £X.XX",
-  //   fetch: fetchBlavatnik,
-  // },
+  {
+    name: "Blavatnik Café",
+    info: "🕐 TBC · 💷 TBC",
+    fetch: fetchBlavatnik,
+  },
 ];
 
 /**
