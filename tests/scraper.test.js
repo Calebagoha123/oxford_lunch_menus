@@ -3,9 +3,11 @@ const axios = require("axios");
 
 jest.mock("axios");
 jest.mock("../blavatnik");
+jest.mock("../schwarzman");
 
 const { parseExeterSection, fetchCohenQuad, getTodaysMenu } = require("../scraper");
 const { fetchBlavatnik } = require("../blavatnik");
+const { fetchSchwarzman } = require("../schwarzman");
 
 // Realistic mock of the Exeter menu page structure
 const MOCK_EXETER_HTML = `
@@ -104,6 +106,7 @@ describe("getTodaysMenu", () => {
   test("includes Cohen Quad section when items are returned", async () => {
     axios.get.mockResolvedValue({ data: MOCK_EXETER_HTML });
     fetchBlavatnik.mockResolvedValue([]);
+    fetchSchwarzman.mockResolvedValue([]);
 
     // Force a day that has items in the mock HTML
     jest.spyOn(Date.prototype, "getDay").mockReturnValue(1); // Monday
@@ -119,6 +122,7 @@ describe("getTodaysMenu", () => {
   test("includes Blavatnik section when items are returned", async () => {
     axios.get.mockResolvedValue({ data: "<html><body></body></html>" });
     fetchBlavatnik.mockResolvedValue(["• Tomato Soup — ~120kcal", "• Grilled Salmon — ~380kcal"]);
+    fetchSchwarzman.mockResolvedValue([]);
 
     const msg = await getTodaysMenu();
     expect(msg).toContain("Blavatnik Café");
@@ -126,22 +130,42 @@ describe("getTodaysMenu", () => {
     expect(msg).toContain("Grilled Salmon");
   });
 
-  test("includes both sections when both return items", async () => {
+  test("includes Schwarzman section when items are returned", async () => {
+    axios.get.mockResolvedValue({ data: "<html><body></body></html>" });
+    fetchBlavatnik.mockResolvedValue([]);
+    fetchSchwarzman.mockResolvedValue([
+      "*Build Your Own: 1 Base + 1 Protein + 2 Sides*",
+      "",
+      "*Base*",
+      "• Bulgur w/ Roasted Mediterranean Veg",
+      "• Coconut Jasmin Rice",
+    ]);
+
+    const msg = await getTodaysMenu();
+    expect(msg).toContain("Schwarzman Centre");
+    expect(msg).toContain("Build Your Own");
+    expect(msg).toContain("Bulgur");
+  });
+
+  test("includes all sections when all return items", async () => {
     axios.get.mockResolvedValue({ data: MOCK_EXETER_HTML });
     fetchBlavatnik.mockResolvedValue(["• Tomato Soup — ~120kcal"]);
+    fetchSchwarzman.mockResolvedValue(["*Build Your Own: 1 Base + 1 Protein + 2 Sides*"]);
 
     jest.spyOn(Date.prototype, "getDay").mockReturnValue(2); // Tuesday
 
     const msg = await getTodaysMenu();
     expect(msg).toContain("Dakota Café (Cohen Quad)");
+    expect(msg).toContain("Schwarzman Centre");
     expect(msg).toContain("Blavatnik Café");
 
     jest.restoreAllMocks();
   });
 
-  test("shows fallback message when both sources return nothing", async () => {
+  test("shows fallback message when all sources return nothing", async () => {
     axios.get.mockResolvedValue({ data: "<html><body></body></html>" });
     fetchBlavatnik.mockResolvedValue([]);
+    fetchSchwarzman.mockResolvedValue([]);
 
     const msg = await getTodaysMenu();
     expect(msg).toContain("No menu items found for today");
@@ -149,6 +173,7 @@ describe("getTodaysMenu", () => {
 
   test("continues if one source throws", async () => {
     axios.get.mockRejectedValue(new Error("Network error"));
+    fetchSchwarzman.mockResolvedValue([]);
     fetchBlavatnik.mockResolvedValue(["• Tomato Soup — ~120kcal"]);
 
     const msg = await getTodaysMenu();

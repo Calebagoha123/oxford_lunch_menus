@@ -7,6 +7,7 @@ const path = require("path");
 const cron = require("node-cron");
 const { getTodaysMenu } = require("./scraper");
 const { checkForNewMenu } = require("./blavatnik");
+const { checkForNewSchwarzmanMenu } = require("./schwarzman");
 
 const GROUP_NAME = process.env.GROUP_NAME;
 if (!GROUP_NAME) {
@@ -98,11 +99,16 @@ function startCronJob() {
  */
 async function sendMenuToGroup() {
   try {
-    // Refresh Blavatnik menu from email before sending (no-op if cache is fresh)
+    // Refresh email-based menus before sending (no-op if cache is fresh)
     try {
       await checkForNewMenu();
     } catch (err) {
       console.error("Error refreshing Blavatnik menu:", err.message);
+    }
+    try {
+      await checkForNewSchwarzmanMenu();
+    } catch (err) {
+      console.error("Error refreshing Schwarzman menu:", err.message);
     }
 
     const chats = await client.getChats();

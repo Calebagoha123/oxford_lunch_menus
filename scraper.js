@@ -1,6 +1,7 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
 const { fetchBlavatnik } = require("./blavatnik");
+const { fetchSchwarzman } = require("./schwarzman");
 
 const DAYS = [
   "Sunday",
@@ -33,11 +34,11 @@ const MENU_SOURCES = [
     info: "🕐 12:00–13:30 · 💷 £3.80",
     fetch: fetchCohenQuad,
   },
-  // {
-  //   name: "Schwarzman Centre",
-  //   info: "🕐 XX:XX–XX:XX · 💷 £X.XX",
-  //   fetch: fetchSchwarzman,
-  // },
+  {
+    name: "Schwarzman Centre",
+    info: "💷 £7.95",
+    fetch: fetchSchwarzman,
+  },
   {
     name: "Blavatnik Café",
     info: "🕐 12:00–13:30 · 💷 £5.50",
@@ -154,11 +155,5 @@ function parseExeterSection($, sectionName, today) {
 
   return lines;
 }
-
-// --- Schwarzman (stub) ---
-// async function fetchSchwarzman(today) { ... }
-
-// --- Blavatnik (stub) ---
-// async function fetchBlavatnik(today) { ... }
 
 module.exports = { getTodaysMenu, fetchCohenQuad, parseExeterSection };
