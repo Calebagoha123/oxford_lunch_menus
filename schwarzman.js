@@ -7,8 +7,8 @@ const { getWeekMonday } = require("./blavatnik");
 
 const MENU_PATH = path.join(__dirname, "data", "schwarzman-menu.json");
 
-// Categories where items are shown comma-separated on one line (compact)
-const COMPACT_CATEGORIES = ["toppings", "sauces & pickles"];
+// Categories to omit from the formatted output (minor items, keeps message concise)
+const SKIP_CATEGORIES = ["toppings", "sauces & pickles"];
 
 /**
  * Connect to Gmail via IMAP, find the latest Schwarzman menu email,
@@ -171,18 +171,12 @@ function formatMenu(menuData) {
 
   for (const [category, items] of Object.entries(menuData)) {
     if (!Array.isArray(items) || !items.length) continue;
-
-    const isCompact = COMPACT_CATEGORIES.includes(category.toLowerCase());
+    if (SKIP_CATEGORIES.includes(category.toLowerCase())) continue;
 
     lines.push("");
-    if (isCompact) {
-      lines.push(`*${category}*`);
-      lines.push(`• ${items.join(", ")}`);
-    } else {
-      lines.push(`*${category}*`);
-      for (const item of items) {
-        lines.push(`• ${item}`);
-      }
+    lines.push(`*${category}*`);
+    for (const item of items) {
+      lines.push(`• ${item}`);
     }
   }
 

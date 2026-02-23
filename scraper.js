@@ -99,6 +99,11 @@ async function fetchCohenQuad(today) {
  * Finds the <h2> matching sectionName, collects content until the next <h2>.
  * Filters day-specific items to only show today's.
  */
+// Sections to skip entirely from the Cohen Quad menu
+const SKIP_SECTIONS_RE = /^panini$/i;
+// Lines to drop from the output
+const SKIP_LINES_RE = /please note.*subject to change/i;
+
 function parseExeterSection($, sectionName, today) {
   const lines = [];
 
@@ -112,6 +117,7 @@ function parseExeterSection($, sectionName, today) {
 
   if (!sectionH2) return lines;
 
+  let skipUntilNext = false;
   let current = sectionH2.next();
   while (current.length && !current.is("h2")) {
     const tag = current.prop("tagName");
@@ -122,6 +128,8 @@ function parseExeterSection($, sectionName, today) {
         current = current.next();
         continue;
       }
+
+      // Check if this heading starts a section we want to skip
       const isHeading =
         tag === "H3" ||
         (tag === "P" &&
@@ -130,12 +138,19 @@ function parseExeterSection($, sectionName, today) {
           !DAY_PREFIX_RE.test(text) &&
           current.next().is("ul"));
 
+      if (isHeading && SKIP_SECTIONS_RE.test(text)) {
+        skipUntilNext = true;
+        current = current.next();
+        continue;
+      }
+
       if (isHeading) {
+        skipUntilNext = false;
         lines.push(`\n*${text}*`);
-      } else {
+      } else if (!skipUntilNext && !SKIP_LINES_RE.test(text)) {
         lines.push(text);
       }
-    } else if (tag === "UL") {
+    } else if (tag === "UL" && !skipUntilNext) {
       current.find("> li").each((_, li) => {
         const liText = $(li).text().trim().replace(/\s+/g, " ");
         const dayMatch = liText.match(DAY_PREFIX_RE);

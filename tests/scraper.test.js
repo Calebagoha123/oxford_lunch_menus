@@ -16,6 +16,11 @@ const MOCK_EXETER_HTML = `
   <p>Some other content</p>
 
   <h2>Dakota Café (Cohen Quad)</h2>
+  <p>Panini</p>
+  <ul>
+    <li>Halloumi, Pickled Walnut and Pesto (V)</li>
+    <li>Tuna Melt (Tuesday-Friday only)</li>
+  </ul>
   <h3>Main Course</h3>
   <ul>
     <li>Monday – Pasta Bolognese • Roasted Tomato Sauce • Parmesan</li>
@@ -30,6 +35,7 @@ const MOCK_EXETER_HTML = `
     <li>Soup of the Day</li>
     <li>Fresh Bread Rolls</li>
   </ul>
+  <p>Please note: all menu items are subject to change</p>
 
   <h2>Hall</h2>
   <p>Hall content here</p>
@@ -65,6 +71,21 @@ describe("parseExeterSection", () => {
     const $ = cheerio.load(MOCK_EXETER_HTML);
     const lines = parseExeterSection($, "Nonexistent Café", "Monday");
     expect(lines).toHaveLength(0);
+  });
+
+  test("excludes the Panini section entirely", () => {
+    const $ = cheerio.load(MOCK_EXETER_HTML);
+    const lines = parseExeterSection($, "Dakota Café (Cohen Quad)", "Monday");
+    const joined = lines.join("\n");
+    expect(joined).not.toContain("Panini");
+    expect(joined).not.toContain("Halloumi");
+    expect(joined).not.toContain("Tuna Melt");
+  });
+
+  test("excludes the disclaimer line", () => {
+    const $ = cheerio.load(MOCK_EXETER_HTML);
+    const lines = parseExeterSection($, "Dakota Café (Cohen Quad)", "Monday");
+    expect(lines.join("\n")).not.toContain("subject to change");
   });
 
   test("stops collecting at the next h2", () => {

@@ -59,7 +59,7 @@ describe("fetchSchwarzman", () => {
     expect(items[0]).toBe("*Build Your Own: 1 Base + 1 Protein + 2 Sides*");
   });
 
-  test("includes bold category headers", async () => {
+  test("includes bold category headers for main categories", async () => {
     existsSpy.mockReturnValue(true);
     readSpy.mockReturnValue(freshCache());
 
@@ -67,8 +67,18 @@ describe("fetchSchwarzman", () => {
     expect(items).toContain("*Base*");
     expect(items).toContain("*Sides*");
     expect(items).toContain("*Protein*");
-    expect(items).toContain("*Toppings*");
-    expect(items).toContain("*Sauces & Pickles*");
+  });
+
+  test("omits toppings and sauces & pickles sections", async () => {
+    existsSpy.mockReturnValue(true);
+    readSpy.mockReturnValue(freshCache());
+
+    const items = await fetchSchwarzman("Monday");
+    const joined = items.join("\n");
+    expect(joined).not.toContain("Toppings");
+    expect(joined).not.toContain("Sauces & Pickles");
+    expect(joined).not.toContain("Crispy Onions");
+    expect(joined).not.toContain("Mango Chutney");
   });
 
   test("shows base and sides items as bullet lists", async () => {
@@ -79,30 +89,6 @@ describe("fetchSchwarzman", () => {
     expect(items).toContain("• Bulgur w/ Roasted Mediterranean Veg");
     expect(items).toContain("• Coconut Jasmin Rice");
     expect(items).toContain("• Polenta chips w/ Parmesan");
-  });
-
-  test("shows toppings as comma-separated on one line", async () => {
-    existsSpy.mockReturnValue(true);
-    readSpy.mockReturnValue(freshCache());
-
-    const items = await fetchSchwarzman("Monday");
-    const toppingsIdx = items.indexOf("*Toppings*");
-    expect(toppingsIdx).toBeGreaterThan(-1);
-    expect(items[toppingsIdx + 1]).toBe(
-      "• Crispy Onions, Garlic Migas, Mixed seeds, Curried Croutons, Jalapeno",
-    );
-  });
-
-  test("shows sauces & pickles as comma-separated on one line", async () => {
-    existsSpy.mockReturnValue(true);
-    readSpy.mockReturnValue(freshCache());
-
-    const items = await fetchSchwarzman("Monday");
-    const saucesIdx = items.indexOf("*Sauces & Pickles*");
-    expect(saucesIdx).toBeGreaterThan(-1);
-    expect(items[saucesIdx + 1]).toBe(
-      "• Mango Chutney, Salted cucumber Riata, Fermented Chili sauce, Pickled Red cabbage",
-    );
   });
 
   test("returns same menu regardless of which weekday is passed", async () => {
