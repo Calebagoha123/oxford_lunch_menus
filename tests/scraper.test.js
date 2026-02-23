@@ -35,6 +35,7 @@ const MOCK_EXETER_HTML = `
     <li>Soup of the Day</li>
     <li>Fresh Bread Rolls</li>
   </ul>
+  <p>Selection of Sides and Salads Each Day!</p>
   <p>Please note: all menu items are subject to change</p>
 
   <h2>Hall</h2>
@@ -82,10 +83,12 @@ describe("parseExeterSection", () => {
     expect(joined).not.toContain("Tuna Melt");
   });
 
-  test("excludes the disclaimer line", () => {
+  test("excludes the disclaimer and sides/salads filler lines", () => {
     const $ = cheerio.load(MOCK_EXETER_HTML);
     const lines = parseExeterSection($, "Dakota Café (Cohen Quad)", "Monday");
-    expect(lines.join("\n")).not.toContain("subject to change");
+    const joined = lines.join("\n");
+    expect(joined).not.toContain("subject to change");
+    expect(joined).not.toContain("Selection of Sides and Salads");
   });
 
   test("stops collecting at the next h2", () => {
@@ -155,7 +158,7 @@ describe("getTodaysMenu", () => {
     axios.get.mockResolvedValue({ data: "<html><body></body></html>" });
     fetchBlavatnik.mockResolvedValue([]);
     fetchSchwarzman.mockResolvedValue([
-      "*Build Your Own: 1 Base + 1 Protein + 2 Sides*",
+      "*1 Base + 1 Protein + 2 Sides*",
       "",
       "*Base*",
       "• Bulgur w/ Roasted Mediterranean Veg",
@@ -164,14 +167,14 @@ describe("getTodaysMenu", () => {
 
     const msg = await getTodaysMenu();
     expect(msg).toContain("Schwarzman Centre");
-    expect(msg).toContain("Build Your Own");
+    expect(msg).toContain("1 Base + 1 Protein + 2 Sides");
     expect(msg).toContain("Bulgur");
   });
 
   test("includes all sections when all return items", async () => {
     axios.get.mockResolvedValue({ data: MOCK_EXETER_HTML });
     fetchBlavatnik.mockResolvedValue(["• Tomato Soup — ~120kcal"]);
-    fetchSchwarzman.mockResolvedValue(["*Build Your Own: 1 Base + 1 Protein + 2 Sides*"]);
+    fetchSchwarzman.mockResolvedValue(["*1 Base + 1 Protein + 2 Sides*"]);
 
     jest.spyOn(Date.prototype, "getDay").mockReturnValue(2); // Tuesday
 

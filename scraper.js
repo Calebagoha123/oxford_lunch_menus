@@ -35,14 +35,14 @@ const MENU_SOURCES = [
     fetch: fetchCohenQuad,
   },
   {
-    name: "Schwarzman Centre",
-    info: "💷 £7.95",
-    fetch: fetchSchwarzman,
-  },
-  {
     name: "Blavatnik Café",
     info: "🕐 12:00–13:30 · 💷 £5.50",
     fetch: fetchBlavatnik,
+  },
+  {
+    name: "Schwarzman Centre",
+    info: "🕐 12:00–14:00 · 💷 £7.95",
+    fetch: fetchSchwarzman,
   },
 ];
 
@@ -102,7 +102,7 @@ async function fetchCohenQuad(today) {
 // Sections to skip entirely from the Cohen Quad menu
 const SKIP_SECTIONS_RE = /^panini$/i;
 // Lines to drop from the output
-const SKIP_LINES_RE = /please note.*subject to change/i;
+const SKIP_LINES_RE = /please note.*subject to change|selection of sides and salads/i;
 
 function parseExeterSection($, sectionName, today) {
   const lines = [];

@@ -56,7 +56,7 @@ describe("fetchSchwarzman", () => {
     readSpy.mockReturnValue(freshCache());
 
     const items = await fetchSchwarzman("Monday");
-    expect(items[0]).toBe("*Build Your Own: 1 Base + 1 Protein + 2 Sides*");
+    expect(items[0]).toBe("*1 Base + 1 Protein + 2 Sides*");
   });
 
   test("includes bold category headers for main categories", async () => {

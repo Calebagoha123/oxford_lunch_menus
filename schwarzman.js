@@ -167,7 +167,7 @@ function saveMenu(menuData) {
  */
 function formatMenu(menuData) {
   const lines = [];
-  lines.push("*Build Your Own: 1 Base + 1 Protein + 2 Sides*");
+  lines.push("*1 Base + 1 Protein + 2 Sides*");
 
   for (const [category, items] of Object.entries(menuData)) {
     if (!Array.isArray(items) || !items.length) continue;
