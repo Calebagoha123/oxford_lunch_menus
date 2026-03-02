@@ -1,6 +1,7 @@
 const { ImapFlow } = require("imapflow");
 const { simpleParser } = require("mailparser");
 const Anthropic = require("@anthropic-ai/sdk");
+const sharp = require("sharp");
 const fs = require("fs");
 const path = require("path");
 const { getWeekMonday } = require("./blavatnik");
@@ -106,6 +107,18 @@ async function checkForNewSchwarzmanMenu() {
  */
 async function parseMenuImage(imageBuffer, contentType, apiKey) {
   const anthropic = new Anthropic({ apiKey });
+
+  // Compress large images to stay under Claude Vision's 5MB base64 limit
+  const MAX_SIZE = 4 * 1024 * 1024;
+  if (imageBuffer.length > MAX_SIZE) {
+    console.log(`Schwarzman: compressing image (${Math.round(imageBuffer.length / 1024)}KB → `);
+    imageBuffer = await sharp(imageBuffer)
+      .resize({ width: 2000, withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    contentType = "image/jpeg";
+    console.log(`${Math.round(imageBuffer.length / 1024)}KB)`);
+  }
 
   const base64Image = imageBuffer.toString("base64");
   const mediaType = contentType === "image/jpeg" ? "image/jpeg" : "image/png";

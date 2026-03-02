@@ -1,6 +1,7 @@
 const { ImapFlow } = require("imapflow");
 const { simpleParser } = require("mailparser");
 const Anthropic = require("@anthropic-ai/sdk");
+const sharp = require("sharp");
 const fs = require("fs");
 const path = require("path");
 
@@ -132,6 +133,19 @@ async function checkForNewMenu() {
 async function parseMenuImage(imageBuffer, apiKey) {
   const anthropic = new Anthropic({ apiKey });
 
+  // Compress large images to stay under Claude Vision's 5MB base64 limit
+  const MAX_SIZE = 4 * 1024 * 1024;
+  let mediaType = "image/png";
+  if (imageBuffer.length > MAX_SIZE) {
+    console.log(`Blavatnik: compressing image (${Math.round(imageBuffer.length / 1024)}KB → `);
+    imageBuffer = await sharp(imageBuffer)
+      .resize({ width: 2000, withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    mediaType = "image/jpeg";
+    console.log(`${Math.round(imageBuffer.length / 1024)}KB)`);
+  }
+
   const base64Image = imageBuffer.toString("base64");
 
   const response = await anthropic.messages.create({
@@ -145,7 +159,7 @@ async function parseMenuImage(imageBuffer, apiKey) {
             type: "image",
             source: {
               type: "base64",
-              media_type: "image/png",
+              media_type: mediaType,
               data: base64Image,
             },
           },
