@@ -54,6 +54,18 @@ async function checkForNewSchwarzmanMenu() {
       const raw = await client.download(uid, undefined, { uid: true });
 
       const parsed = await simpleParser(raw.content);
+
+      // Only process if the email is from the current week
+      const emailDate = parsed.date;
+      if (emailDate) {
+        const emailWeekMonday = getWeekMonday(emailDate);
+        const currentMonday = getWeekMonday();
+        if (emailWeekMonday.toDateString() !== currentMonday.toDateString()) {
+          console.log(`Schwarzman: latest email is from ${emailDate.toDateString()} (not current week), skipping.`);
+          return;
+        }
+      }
+
       const imageAttachments = parsed.attachments.filter(
         (a) => a.contentType === "image/png" || a.contentType === "image/jpeg",
       );
@@ -156,6 +168,7 @@ Important:
 function saveMenu(menuData) {
   const payload = {
     weekCommencing: getWeekMonday().toISOString(),
+    lastChecked: new Date().toDateString(),
     menu: menuData,
   };
   fs.mkdirSync(path.dirname(MENU_PATH), { recursive: true });
@@ -184,6 +197,18 @@ function formatMenu(menuData) {
 }
 
 /**
+ * Update lastChecked in the cache file to avoid re-checking Gmail repeatedly.
+ */
+function updateLastChecked(menuPath) {
+  if (!fs.existsSync(menuPath)) return;
+  try {
+    const data = JSON.parse(fs.readFileSync(menuPath, "utf-8"));
+    data.lastChecked = new Date().toDateString();
+    fs.writeFileSync(menuPath, JSON.stringify(data, null, 2));
+  } catch { /* ignore */ }
+}
+
+/**
  * Read cached menu and return formatted items.
  * Since the Schwarzman menu is the same all week, the `today` parameter is ignored.
  * Refreshes only when the cached week differs from the current week.
@@ -197,7 +222,11 @@ async function fetchSchwarzman(_today) {
         ? new Date(cached.weekCommencing).toDateString()
         : null;
       const currentMonday = getWeekMonday().toDateString();
-      if (cachedMonday === currentMonday) needsRefresh = false;
+      if (cachedMonday === currentMonday) {
+        needsRefresh = false;
+      } else if (cached.lastChecked === new Date().toDateString()) {
+        needsRefresh = false;
+      }
     } catch {
       // Corrupted file, will refresh
     }
@@ -205,13 +234,20 @@ async function fetchSchwarzman(_today) {
 
   if (needsRefresh) {
     await checkForNewSchwarzmanMenu();
+    updateLastChecked(MENU_PATH);
   }
 
   if (!fs.existsSync(MENU_PATH)) return [];
 
   try {
     const cached = JSON.parse(fs.readFileSync(MENU_PATH, "utf-8"));
-    return formatMenu(cached.menu);
+    const cachedMonday = cached.weekCommencing
+      ? new Date(cached.weekCommencing).toDateString()
+      : null;
+    const stale = cachedMonday !== getWeekMonday().toDateString();
+    const lines = formatMenu(cached.menu);
+    if (stale && lines.length) lines.unshift("_Menu not yet updated this week_");
+    return lines;
   } catch {
     return [];
   }

@@ -59,38 +59,63 @@ async function checkForNewMenu() {
         return;
       }
 
-      // Fetch the most recent matching message
-      const uid = messages[messages.length - 1];
-      const raw = await client.download(uid, undefined, { uid: true });
+      const currentMonday = getWeekMonday();
 
-      const parsed = await simpleParser(raw.content);
-      const imageAttachments = parsed.attachments.filter(
-        (a) => a.contentType === "image/png" || a.contentType === "image/jpeg",
-      );
+      // Iterate from newest to oldest to find an email whose content
+      // covers the current week. Blavatnik emails are sent on Friday
+      // for the following Mon–Fri, so:
+      //   contentMonday = getWeekMonday(emailDate) + 7 days
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const uid = messages[i];
+        const raw = await client.download(uid, undefined, { uid: true });
+        const parsed = await simpleParser(raw.content);
 
-      if (!imageAttachments.length) {
-        console.log("Blavatnik: no PNG/JPEG attachment found in latest email.");
+        const emailDate = parsed.date;
+        if (emailDate) {
+          const emailWeekMonday = getWeekMonday(emailDate);
+          const contentMonday = new Date(emailWeekMonday);
+          contentMonday.setDate(contentMonday.getDate() + 7);
+
+          if (contentMonday.toDateString() !== currentMonday.toDateString()) {
+            if (contentMonday > currentMonday) {
+              console.log(`Blavatnik: email from ${emailDate.toDateString()} is for a future week, trying older...`);
+              continue;
+            }
+            console.log(`Blavatnik: no exact match for current week, using email from ${emailDate.toDateString()}.`);
+          }
+        }
+
+        const imageAttachments = parsed.attachments.filter(
+          (a) => a.contentType === "image/png" || a.contentType === "image/jpeg",
+        );
+
+        if (!imageAttachments.length) {
+          console.log("Blavatnik: no PNG/JPEG attachment in this email, trying older...");
+          continue;
+        }
+
+        // Try each image until one yields actual menu data
+        let menuData = null;
+        for (const attachment of imageAttachments) {
+          console.log(`Blavatnik: trying attachment "${attachment.filename}" (${Math.round(attachment.size / 1024)}KB)...`);
+          menuData = await parseMenuImage(attachment.content, apiKey);
+          const hasItems = menuData && WEEKDAYS.some(
+            (day) => Array.isArray(menuData[day]) && menuData[day].length > 0,
+          );
+          if (hasItems) break;
+          menuData = null;
+        }
+
+        if (menuData) {
+          saveMenu(menuData);
+          console.log("Blavatnik: menu saved successfully.");
+        } else {
+          console.log("Blavatnik: no menu data found in email attachments.");
+        }
         return;
       }
 
-      // Try each image until one yields actual menu data
-      let menuData = null;
-      for (const attachment of imageAttachments) {
-        console.log(`Blavatnik: trying attachment "${attachment.filename}" (${Math.round(attachment.size / 1024)}KB)...`);
-        menuData = await parseMenuImage(attachment.content, apiKey);
-        const hasItems = menuData && WEEKDAYS.some(
-          (day) => Array.isArray(menuData[day]) && menuData[day].length > 0,
-        );
-        if (hasItems) break;
-        menuData = null;
-      }
-
-      if (menuData) {
-        saveMenu(menuData);
-        console.log("Blavatnik: menu saved successfully.");
-      } else {
-        console.log("Blavatnik: no menu data found in any attachment.");
-      }
+      console.log("Blavatnik: no suitable email found for the current week.");
     } finally {
       lock.release();
     }
@@ -160,6 +185,7 @@ Preserve the exact order items appear in the image. Do not include calorie count
 function saveMenu(menuData) {
   const payload = {
     weekCommencing: getWeekMonday().toISOString(),
+    lastChecked: new Date().toDateString(),
     menu: menuData,
   };
   fs.mkdirSync(path.dirname(MENU_PATH), { recursive: true });
@@ -189,6 +215,18 @@ function formatDayMenu(dayMenu) {
 }
 
 /**
+ * Update lastChecked in the cache file to avoid re-checking Gmail repeatedly.
+ */
+function updateLastChecked(menuPath) {
+  if (!fs.existsSync(menuPath)) return;
+  try {
+    const data = JSON.parse(fs.readFileSync(menuPath, "utf-8"));
+    data.lastChecked = new Date().toDateString();
+    fs.writeFileSync(menuPath, JSON.stringify(data, null, 2));
+  } catch { /* ignore */ }
+}
+
+/**
  * Read cached menu and return today's items.
  * Refreshes only when the cached week differs from the current week.
  */
@@ -201,7 +239,11 @@ async function fetchBlavatnik(today) {
         ? new Date(cached.weekCommencing).toDateString()
         : null;
       const currentMonday = getWeekMonday().toDateString();
-      if (cachedMonday === currentMonday) needsRefresh = false;
+      if (cachedMonday === currentMonday) {
+        needsRefresh = false;
+      } else if (cached.lastChecked === new Date().toDateString()) {
+        needsRefresh = false;
+      }
     } catch {
       // Corrupted file, will refresh
     }
@@ -209,15 +251,24 @@ async function fetchBlavatnik(today) {
 
   if (needsRefresh) {
     await checkForNewMenu();
+    updateLastChecked(MENU_PATH);
   }
 
   if (!fs.existsSync(MENU_PATH)) return [];
 
   try {
     const cached = JSON.parse(fs.readFileSync(MENU_PATH, "utf-8"));
+    const cachedMonday = cached.weekCommencing
+      ? new Date(cached.weekCommencing).toDateString()
+      : null;
+    const stale = cachedMonday !== getWeekMonday().toDateString();
+
     const dayMenu = cached.menu[today];
     const lines = formatDayMenu(dayMenu);
-    if (lines.length) return lines;
+    if (lines.length) {
+      if (stale) lines.unshift("_Menu not yet updated this week_");
+      return lines;
+    }
 
     // Today not in menu — find the next available weekday
     const todayIdx = WEEKDAYS.indexOf(today);
@@ -226,7 +277,9 @@ async function fetchBlavatnik(today) {
       WEEKDAYS.find((day) => Array.isArray(cached.menu[day]) && cached.menu[day].length > 0);
 
     if (!fallbackDay) return [];
-    return [`_Next available: ${fallbackDay}_`, ...formatDayMenu(cached.menu[fallbackDay])];
+    const fallbackLines = [`_Next available: ${fallbackDay}_`, ...formatDayMenu(cached.menu[fallbackDay])];
+    if (stale) fallbackLines.unshift("_Menu not yet updated this week_");
+    return fallbackLines;
   } catch {
     return [];
   }
