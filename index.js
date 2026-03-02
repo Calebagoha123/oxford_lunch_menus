@@ -6,6 +6,8 @@ const { execSync } = require("child_process");
 const path = require("path");
 const cron = require("node-cron");
 const { getTodaysMenu } = require("./scraper");
+const { checkForNewMenu: refreshBlavatnik } = require("./blavatnik");
+const { checkForNewSchwarzmanMenu: refreshSchwarzman } = require("./schwarzman");
 
 const GROUP_NAME = process.env.GROUP_NAME;
 if (!GROUP_NAME) {
@@ -66,10 +68,24 @@ client.on("ready", async () => {
 
 // On-demand: reply to "!menu" in the target group
 client.on("message", async (msg) => {
-  if (msg.body.trim() !== "!menu") return;
+  const body = msg.body.trim();
+  if (body !== "!menu" && body !== "!refresh") return;
 
   const chat = await msg.getChat();
   if (!chat.isGroup || chat.name !== GROUP_NAME) return;
+
+  if (body === "!refresh") {
+    console.log(`!refresh requested in "${chat.name}"`);
+    await chat.sendMessage("Refreshing menus from Gmail...");
+    try {
+      await Promise.all([refreshBlavatnik(), refreshSchwarzman()]);
+      await chat.sendMessage("Done! Menus refreshed. Send !menu to see the latest.");
+    } catch (err) {
+      console.error("Error refreshing menus:", err.message);
+      await chat.sendMessage("Something went wrong refreshing the menus.");
+    }
+    return;
+  }
 
   console.log(`!menu requested in "${chat.name}"`);
   try {
