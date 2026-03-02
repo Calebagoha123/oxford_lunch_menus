@@ -142,20 +142,19 @@ async function parseMenuImage(imageBuffer, contentType, apiKey) {
             type: "text",
             text: `Extract the "Build Your Own" lunch menu from this image. Return ONLY valid JSON with no markdown or code fences.
 
-The menu has categories like Base, Sides, Protein, Toppings, Sauces & Pickles, etc. Return a JSON object where keys are the category names exactly as shown and values are arrays of items:
+The menu has step-based categories (e.g. "STEP 1 CHOOSE YOUR BASE"). Simplify the category names to just: "Base", "Sides", "Protein", "Toppings", "Sauces & Pickles", etc.
+
+Return a JSON object where keys are the simplified category names and values are arrays of food items:
 {
-  "Base": ["item1", "item2"],
-  "Sides": ["item1", "item2", "item3"],
-  "Protein": ["item1", "item2"],
-  "Toppings": ["item1", "item2"],
-  "Sauces & Pickles": ["item1", "item2"]
+  "Base": ["Long Grain Rice w/ Onion, Garlic & Coriander", "Miso Mashed Potatoes, Crispy Onions, Lime"],
+  "Sides": ["Veggie and Feta Frittata", "Sweetcorn w/ Cheese, Lime, Garlic"],
+  "Protein": ["Jerk Chicken Leg", "Oyster Mushroom and Smoked Tofu Indonesian Curry"]
 }
 
 Important:
-- Strip any calorie counts and pricing info from items
-- Preserve category names exactly as they appear on the board
-- Preserve the exact order items appear in each category
-- Include ALL categories and ALL items you can read`,
+- Join item names that wrap across multiple lines into a single string (e.g. "Long Grain Rice w/ Onion, Garlic &" + "Coriander" = one item)
+- Only include actual food items — skip headers, instructions, pricing info, calorie counts, and labels like "WEEKLY MENU", "BUNDLE PRICE", "SELECT ANY TWO", "PLUS", "Additional side/protein"
+- Preserve the exact order items appear in each category`,
           },
         ],
       },
