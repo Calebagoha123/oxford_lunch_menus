@@ -144,15 +144,16 @@ async function parseMenuImage(imageBuffer, contentType, apiKey) {
 
 The menu has step-based categories (e.g. "STEP 1 CHOOSE YOUR BASE"). Simplify the category names to just: "Base", "Sides", "Protein", "Toppings", "Sauces & Pickles", etc.
 
-Return a JSON object where keys are the simplified category names and values are arrays of food items:
+Return a JSON object where keys are the simplified category names and values are arrays of ALL food items in that category:
 {
-  "Base": ["Long Grain Rice w/ Onion, Garlic & Coriander", "Miso Mashed Potatoes, Crispy Onions, Lime"],
-  "Sides": ["Veggie and Feta Frittata", "Sweetcorn w/ Cheese, Lime, Garlic"],
-  "Protein": ["Jerk Chicken Leg", "Oyster Mushroom and Smoked Tofu Indonesian Curry"]
+  "Base": ["item 1", "item 2"],
+  "Sides": ["item 1", "item 2", "item 3"],
+  "Protein": ["item 1", "item 2", "item 3", "item 4"]
 }
 
 Important:
-- Join item names that wrap across multiple lines into a single string (e.g. "Long Grain Rice w/ Onion, Garlic &" + "Coriander" = one item)
+- Include ALL food items you can read in each category — do not skip any
+- Join item names that wrap across multiple lines into a single string (e.g. "Crispy Chilli" + "Beef" on two lines = "Crispy Chilli Beef")
 - Only include actual food items — skip headers, instructions, pricing info, calorie counts, and labels like "WEEKLY MENU", "BUNDLE PRICE", "SELECT ANY TWO", "PLUS", "Additional side/protein"
 - Preserve the exact order items appear in each category`,
           },
