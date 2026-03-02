@@ -163,47 +163,16 @@ Important:
   });
 
   const text = response.content[0].text.trim();
-  let parsed;
   try {
-    parsed = JSON.parse(text);
+    return JSON.parse(text);
   } catch {
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
-      parsed = JSON.parse(match[0]);
-    } else {
-      console.error("Schwarzman: failed to parse Vision API response:", text);
-      return null;
+      return JSON.parse(match[0]);
     }
+    console.error("Schwarzman: failed to parse Vision API response:", text);
+    return null;
   }
-
-  // Merge items that were split across visual line breaks
-  for (const category of Object.keys(parsed)) {
-    if (!Array.isArray(parsed[category])) continue;
-    parsed[category] = mergeWrappedItems(parsed[category]);
-  }
-  return parsed;
-}
-
-/**
- * Merge array items that were split across visual line breaks in the image.
- * e.g. ["Garlic Rice &", "Coriander"] → ["Garlic Rice & Coriander"]
- */
-function mergeWrappedItems(items) {
-  const merged = [];
-  for (const item of items) {
-    if (merged.length > 0) {
-      const prev = merged[merged.length - 1];
-      const continuesFromPrev = /[&,]$/.test(prev.trim()) ||
-        /\bw\/?$/.test(prev.trim()) ||
-        /^[a-z]/.test(item.trim());
-      if (continuesFromPrev) {
-        merged[merged.length - 1] = prev.trim() + " " + item.trim();
-        continue;
-      }
-    }
-    merged.push(item);
-  }
-  return merged;
 }
 
 /**
