@@ -2,6 +2,7 @@ require("dotenv").config();
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcodeTerminal = require("qrcode-terminal");
 const QRCode = require("qrcode");
+const nodemailer = require("nodemailer");
 const { execSync } = require("child_process");
 const path = require("path");
 const cron = require("node-cron");
@@ -15,10 +16,35 @@ if (!GROUP_NAME) {
   process.exit(1);
 }
 
+/**
+ * Send an alert email to calebagoha@gmail.com when something goes wrong.
+ */
+async function sendAlert(subject, body) {
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  if (!user || !pass) return;
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user, pass },
+    });
+    await transporter.sendMail({
+      from: user,
+      to: "calebagoha@gmail.com",
+      subject: `[lunch-bot] ${subject}`,
+      text: body,
+    });
+    console.log("Alert email sent.");
+  } catch (err) {
+    console.error("Failed to send alert email:", err.message);
+  }
+}
+
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
     headless: true,
+    protocolTimeout: 300000,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -32,7 +58,6 @@ const client = new Client({
 });
 
 client.on("qr", async (qr) => {
-  // Save QR as PNG image and open it
   const qrPath = path.join(__dirname, "qr-code.png");
   await QRCode.toFile(qrPath, qr, { width: 400, margin: 2 });
   console.log(`QR code saved to: ${qrPath}`);
@@ -40,7 +65,6 @@ client.on("qr", async (qr) => {
   try {
     execSync(`open "${qrPath}"`);
   } catch {
-    // Also print in terminal as fallback
     qrcodeTerminal.generate(qr, { small: true });
   }
 });
@@ -49,8 +73,18 @@ client.on("authenticated", () => {
   console.log("WhatsApp authenticated.");
 });
 
-client.on("auth_failure", (msg) => {
+client.on("auth_failure", async (msg) => {
   console.error("Authentication failed:", msg);
+  await sendAlert("Authentication failed", `WhatsApp auth failed: ${msg}`);
+});
+
+client.on("disconnected", async (reason) => {
+  console.error("WhatsApp disconnected:", reason);
+  await sendAlert(
+    "WhatsApp disconnected",
+    `The lunch bot was disconnected from WhatsApp.\nReason: ${reason}\n\nPM2 will attempt to restart it. If it keeps failing, re-scan the QR code.`
+  );
+  process.exit(1);
 });
 
 const SEND_NOW = process.argv.includes("--send-now");
@@ -61,12 +95,13 @@ client.on("ready", async () => {
   if (SEND_NOW) {
     console.log("--send-now flag detected, sending menu immediately...");
     await sendMenuToGroup();
+    process.exit(0);
   }
 
   startCronJob();
 });
 
-// On-demand: reply to "!menu" in the target group
+// On-demand: reply to "!menu" or "!refresh" in the target group
 client.on("message", async (msg) => {
   const body = msg.body.trim();
   if (body !== "!menu" && body !== "!refresh") return;
@@ -114,12 +149,12 @@ function startCronJob() {
 async function sendMenuToGroup() {
   try {
     const chats = await client.getChats();
-    const group = chats.find(
-      (c) => c.isGroup && c.name === GROUP_NAME,
-    );
+    const group = chats.find((c) => c.isGroup && c.name === GROUP_NAME);
 
     if (!group) {
-      console.error(`Group "${GROUP_NAME}" not found.`);
+      const msg = `Group "${GROUP_NAME}" not found.`;
+      console.error(msg);
+      await sendAlert("Group not found", msg);
       return;
     }
 
@@ -128,6 +163,10 @@ async function sendMenuToGroup() {
     console.log(`Menu sent to "${GROUP_NAME}".`);
   } catch (err) {
     console.error("Error sending menu:", err.message);
+    await sendAlert(
+      "Failed to send menu",
+      `The lunch bot failed to send today's menu.\n\nError: ${err.message}\n\nCheck PM2 logs: pm2 logs lunch-bot`
+    );
   }
 }
 
