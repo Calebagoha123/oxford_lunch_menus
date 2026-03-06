@@ -1,6 +1,4 @@
 require("dotenv").config();
-const { Client, LocalAuth } = require("whatsapp-web.js");
-const qrcodeTerminal = require("qrcode-terminal");
 const QRCode = require("qrcode");
 const nodemailer = require("nodemailer");
 const { execSync } = require("child_process");
@@ -16,9 +14,12 @@ if (!GROUP_NAME) {
   process.exit(1);
 }
 
-/**
- * Send an alert email to calebagoha@gmail.com when something goes wrong.
- */
+const SEND_NOW = process.argv.includes("--send-now");
+
+let sock;
+let groupJid = null;
+let cronStarted = false;
+
 async function sendAlert(subject, body) {
   const user = process.env.GMAIL_USER;
   const pass = process.env.GMAIL_APP_PASSWORD;
@@ -40,126 +41,32 @@ async function sendAlert(subject, body) {
   }
 }
 
-const client = new Client({
-  authStrategy: new LocalAuth(),
-  puppeteer: {
-    headless: true,
-    protocolTimeout: 300000,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--single-process",
-      "--no-zygote",
-      "--disable-extensions",
-    ],
-  },
-});
-
-client.on("qr", async (qr) => {
-  const qrPath = path.join(__dirname, "qr-code.png");
-  await QRCode.toFile(qrPath, qr, { width: 400, margin: 2 });
-  console.log(`QR code saved to: ${qrPath}`);
-  console.log("Opening QR code image — scan it with WhatsApp (Linked Devices)...");
+async function cacheGroupJid() {
   try {
-    execSync(`open "${qrPath}"`);
-  } catch {
-    qrcodeTerminal.generate(qr, { small: true });
-  }
-});
-
-client.on("authenticated", () => {
-  console.log("WhatsApp authenticated.");
-});
-
-client.on("auth_failure", async (msg) => {
-  console.error("Authentication failed:", msg);
-  await sendAlert("Authentication failed", `WhatsApp auth failed: ${msg}`);
-});
-
-client.on("disconnected", async (reason) => {
-  console.error("WhatsApp disconnected:", reason);
-  await sendAlert(
-    "WhatsApp disconnected",
-    `The lunch bot was disconnected from WhatsApp.\nReason: ${reason}\n\nPM2 will attempt to restart it. If it keeps failing, re-scan the QR code.`
-  );
-  process.exit(1);
-});
-
-const SEND_NOW = process.argv.includes("--send-now");
-
-client.on("ready", async () => {
-  console.log("WhatsApp client is ready!");
-
-  if (SEND_NOW) {
-    console.log("--send-now flag detected, sending menu immediately...");
-    await sendMenuToGroup();
-    process.exit(0);
-  }
-
-  startCronJob();
-});
-
-// On-demand: reply to "!menu" or "!refresh" in the target group
-client.on("message", async (msg) => {
-  const body = msg.body.trim();
-  if (body !== "!menu" && body !== "!refresh") return;
-
-  const chat = await msg.getChat();
-  if (!chat.isGroup || chat.name !== GROUP_NAME) return;
-
-  if (body === "!refresh") {
-    console.log(`!refresh requested in "${chat.name}"`);
-    await chat.sendMessage("Refreshing menus from Gmail...");
-    try {
-      await Promise.all([refreshBlavatnik(), refreshSchwarzman()]);
-      await chat.sendMessage("Done! Menus refreshed. Send !menu to see the latest.");
-    } catch (err) {
-      console.error("Error refreshing menus:", err.message);
-      await chat.sendMessage("Something went wrong refreshing the menus.");
+    const groups = await sock.groupFetchAllParticipating();
+    const group = Object.values(groups).find((g) => g.subject === GROUP_NAME);
+    if (group) {
+      groupJid = group.id;
+      console.log(`Group "${GROUP_NAME}" found.`);
+    } else {
+      console.error(`Group "${GROUP_NAME}" not found.`);
     }
-    return;
-  }
-
-  console.log(`!menu requested in "${chat.name}"`);
-  try {
-    const menu = await getTodaysMenu();
-    await chat.sendMessage(menu);
   } catch (err) {
-    console.error("Error fetching menu:", err.message);
-    await chat.sendMessage("Sorry, I couldn't fetch today's menu. Try again later.");
+    console.error("Error fetching groups:", err.message);
   }
-});
-
-/**
- * Schedule daily menu send at 11:00 AM, Monday–Friday.
- */
-function startCronJob() {
-  cron.schedule("0 11 * * 1-5", async () => {
-    console.log("Cron triggered: sending daily menu...");
-    await sendMenuToGroup();
-  });
-  console.log("Cron job scheduled: 11:00 AM Mon–Fri");
 }
 
-/**
- * Find the target group by name and send today's menu.
- */
 async function sendMenuToGroup() {
   try {
-    const chats = await client.getChats();
-    const group = chats.find((c) => c.isGroup && c.name === GROUP_NAME);
-
-    if (!group) {
+    if (!groupJid) await cacheGroupJid();
+    if (!groupJid) {
       const msg = `Group "${GROUP_NAME}" not found.`;
       console.error(msg);
       await sendAlert("Group not found", msg);
       return;
     }
-
     const menu = await getTodaysMenu();
-    await group.sendMessage(menu);
+    await sock.sendMessage(groupJid, { text: menu });
     console.log(`Menu sent to "${GROUP_NAME}".`);
   } catch (err) {
     console.error("Error sending menu:", err.message);
@@ -170,4 +77,132 @@ async function sendMenuToGroup() {
   }
 }
 
-client.initialize();
+function startCronJob() {
+  if (cronStarted) return;
+  cronStarted = true;
+  cron.schedule("0 11 * * 1-5", async () => {
+    console.log("Cron triggered: sending daily menu...");
+    await sendMenuToGroup();
+  });
+  console.log("Cron job scheduled: 11:00 AM Mon–Fri");
+}
+
+async function connectToWhatsApp() {
+  const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    DisconnectReason,
+    fetchLatestBaileysVersion,
+  } = await import("@whiskeysockets/baileys");
+
+  const pino = (await import("pino")).default;
+
+  const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
+  const { version } = await fetchLatestBaileysVersion();
+
+  sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false,
+    logger: pino({ level: "silent" }),
+  });
+
+  sock.ev.on("creds.update", saveCreds);
+
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      const qrPath = path.join(__dirname, "qr-code.png");
+      await QRCode.toFile(qrPath, qr, { width: 400, margin: 2 });
+      console.log(`QR code saved to: ${qrPath}`);
+      try {
+        execSync(`open "${qrPath}"`);
+      } catch {}
+    }
+
+    if (connection === "close") {
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const loggedOut = statusCode === DisconnectReason.loggedOut;
+
+      if (loggedOut) {
+        console.error("Logged out from WhatsApp.");
+        await sendAlert(
+          "Logged out",
+          "The lunch bot was logged out of WhatsApp. Please re-authenticate by restarting and scanning the QR code."
+        );
+        process.exit(1);
+      } else {
+        console.log(`Connection closed (code ${statusCode}), reconnecting...`);
+        connectToWhatsApp();
+      }
+    }
+
+    if (connection === "open") {
+      console.log("WhatsApp connected!");
+      await cacheGroupJid();
+
+      if (SEND_NOW) {
+        await sendMenuToGroup();
+        process.exit(0);
+      }
+
+      startCronJob();
+    }
+  });
+
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    if (type !== "notify") return;
+
+    for (const msg of messages) {
+      if (msg.key.fromMe) continue;
+
+      const body =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        "";
+
+      if (body !== "!menu" && body !== "!refresh") continue;
+
+      const chatJid = msg.key.remoteJid;
+      if (!chatJid.endsWith("@g.us")) continue;
+
+      if (groupJid && chatJid !== groupJid) continue;
+      if (!groupJid) {
+        const meta = await sock.groupMetadata(chatJid);
+        if (meta.subject !== GROUP_NAME) continue;
+        groupJid = chatJid;
+      }
+
+      if (body === "!refresh") {
+        console.log(`!refresh requested in "${GROUP_NAME}"`);
+        await sock.sendMessage(chatJid, { text: "Refreshing menus from Gmail..." });
+        try {
+          await Promise.all([refreshBlavatnik(), refreshSchwarzman()]);
+          await sock.sendMessage(chatJid, {
+            text: "Done! Menus refreshed. Send !menu to see the latest.",
+          });
+        } catch (err) {
+          console.error("Error refreshing menus:", err.message);
+          await sock.sendMessage(chatJid, {
+            text: "Something went wrong refreshing the menus.",
+          });
+        }
+        continue;
+      }
+
+      console.log(`!menu requested in "${GROUP_NAME}"`);
+      try {
+        const menu = await getTodaysMenu();
+        await sock.sendMessage(chatJid, { text: menu });
+      } catch (err) {
+        console.error("Error fetching menu:", err.message);
+        await sock.sendMessage(chatJid, {
+          text: "Sorry, I couldn't fetch today's menu. Try again later.",
+        });
+      }
+    }
+  });
+}
+
+connectToWhatsApp();
